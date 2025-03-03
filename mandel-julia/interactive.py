@@ -22,25 +22,58 @@ def generate_julia_set(c, xmin, xmax, ymin, ymax, width, height, max_iter):
 
     return julia
 
+def mandelbrot(c, iterations):
+    """
+    Compute the Mandelbrot set for the given complex matrix.
+    """
+    z = np.zeros_like(c)
+    stable = np.zeros(c.shape, dtype=int)
+    for i in range(iterations):
+        mask = np.abs(z) <= 2
+        z[mask] = z[mask] ** 2 + c[mask]
+
+        stable[mask] = i
+
+    return stable
+
+def complex_matrix(xmin, xmax, ymin, ymax, pixel_density):
+    re = np.linspace(xmin, xmax, int((xmax-xmin)*pixel_density))
+    im = np.linspace(ymin, ymax, int((ymax-ymin)*pixel_density))
+    return re[np.newaxis, :] + im[:, np.newaxis] * 1j
+
 class InteractiveJulia:
     def __init__(self):
-        self.fig, self.ax = plt.subplots()
+        self.fig, (self.ax1, self.ax2) = plt.subplots(1,2)
         self.control_x = 0
         self.control_y = 0
 
-        self.width = 512
-        self.height = 512
+        self.xmin, self.xmax = -1.5, 1.5
+        self.ymin, self.ymax = -1.5, 1.5
+        self.max_iter = 100
+
+        # Resolution of the image
+        self.width = 256*2
+        self.height = 256*2
 
         # Initialize the Julia set image
-        self.image = self.ax.imshow(
+        self.image = self.ax1.imshow(
             np.zeros((self.height, self.width)).get(), 
-            extent=(-1.5, 1.5, -1.5, 1.5), 
+            extent=(self.xmin, self.xmax, self.ymin, self.ymax), 
             cmap="hot", 
             origin="lower"
         )
 
-        # Add a red dot to indicate the control point
-        self.dot, = self.ax.plot([self.control_x], [self.control_y], 'ro')
+        self.complex_matrix = complex_matrix(-2, 0.5, -1.5, 1.5, 2**8)
+
+        self.mandelbrot = self.ax2.imshow(
+            mandelbrot(self.complex_matrix, 100).get(),
+            extent=(-2, 0.5, -1.5, 1.5),
+            cmap="hot",
+            origin="lower"
+        )
+
+        # Add a red dot to indicate the control point inside mandelbrot
+        self.dot, = self.ax2.plot([self.control_x], [self.control_y], 'go')
 
         # Connect event handlers
         self.cid_press = self.fig.canvas.mpl_connect('button_press_event', self.on_press)
@@ -51,7 +84,7 @@ class InteractiveJulia:
 
     def on_press(self, event):
         """Handle mouse press events."""
-        if event.inaxes != self.ax:
+        if event.inaxes != self.ax2:
             return
         self.dragging = True
 
@@ -61,7 +94,7 @@ class InteractiveJulia:
 
     def on_move(self, event):
         """Handle mouse movement events."""
-        if self.dragging and event.inaxes == self.ax:
+        if self.dragging and event.inaxes == self.ax2:
             self.control_x = event.xdata
             self.control_y = event.ydata
 
@@ -75,15 +108,14 @@ class InteractiveJulia:
     def update(self):
         """Update the Julia set based on the current control point."""
         c = self.control_x + self.control_y * 1j
-        xmin, xmax = -1.5, 1.5
-        ymin, ymax = -1.5, 1.5
-        max_iter = 100
 
         # Generate the Julia set
-        julia = generate_julia_set(c, xmin, xmax, ymin, ymax, self.width, self.height, max_iter)
+        julia = generate_julia_set(c, self.xmin, self.xmax, 
+                                   self.ymin, self.ymax, 
+                                   self.width, self.height, self.max_iter)
 
         # Update the image data
-        self.image.set_data(julia.get())
+        self.image.set_data(np.asnumpy(julia))
         self.image.set_clim(vmin=julia.min(), vmax=julia.max())  # Adjust color limits
 
 if __name__ == "__main__":
